@@ -14,6 +14,8 @@ class EvaLLVM {
 	public:
 		EvaLLVM() {
 			initModule();
+
+			setupExternalFunctions();
 		}
 
 		void exec(const std::string& program) {
@@ -30,15 +32,18 @@ class EvaLLVM {
 		void compile(/* ast */) {
 			fn = createFunction("main", llvm::FunctionType::get(builder->getInt32Ty(), false /* vararg */ ));
 
-			auto result = gen(/* ast */);
-
-			auto i32Result = builder->CreateIntCast(result, builder->getInt32Ty(), true);
+			auto result = gen();
 			
-			builder->CreateRet(i32Result);
+			builder->CreateRet(builder->getInt32(0));
 		}
 
-		llvm::Value* gen(/* exp */) {
-			return builder->getInt32(42);
+		llvm::Value* gen() {
+			auto str = builder->CreateGlobalString("Hello World\n");
+
+			auto printfFn = module->getFunction("printf");
+			std::vector<llvm::Value *> args{str};
+
+			return builder->CreateCall(printfFn, args);
 		}
 
 		llvm::Function* createFunction(const std::string &fnName, llvm::FunctionType *fnType) {
@@ -67,6 +72,16 @@ class EvaLLVM {
 
     llvm::BasicBlock* createBasicBlock(const std::string &name, llvm::Function *fn = nullptr) {
 			return llvm::BasicBlock::Create(*ctx, name, fn);
+		}
+
+		void setupExternalFunctions() {
+		  auto bytePtrTy = llvm::PointerType::get(builder->getInt8Ty(), 0);
+
+			// int printf(const char* fmt, ...)
+			module->getOrInsertFunction("printf", 
+					                        llvm::FunctionType::get(builder->getInt32Ty(), 
+																		 bytePtrTy,
+																		 true));
 		}
 
 	private:
