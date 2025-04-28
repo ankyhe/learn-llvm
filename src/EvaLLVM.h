@@ -21,6 +21,10 @@ class EvaLLVM {
 			initModule();
 
 			setupExternalFunctions();
+
+			createGlobalVar("TRUE", builder->getInt32(1));
+			createGlobalVar("FALSE", builder->getInt32(0));
+			createGlobalVar("VERSION", builder->getInt32(1024));
 		}
 
 		void exec(const std::string& program) {
@@ -53,7 +57,9 @@ class EvaLLVM {
 				  return builder->CreateGlobalString(str);
 				}
 
-				case SYMBOL: throw std::runtime_error("Not Supported"); //TODO
+				case SYMBOL: {
+				  return module->getNamedGlobal(exp.string)->getInitializer();
+				}
 			  case LIST: {
 				  if(exp.list.empty()) {
 						return builder->getInt32(0);
@@ -69,6 +75,10 @@ class EvaLLVM {
 							}
 			        auto printfFn = module->getFunction("printf");
 			        return builder->CreateCall(printfFn, args);
+						} else if (op == "var") {
+							auto variableName = exp.list[1].string;
+							auto init = gen(exp.list[2]);
+							return createGlobalVar(variableName, ((llvm::Constant *)init))->getInitializer();
 						}
 
 						// TODO
@@ -118,6 +128,15 @@ class EvaLLVM {
 					                        llvm::FunctionType::get(builder->getInt32Ty(), 
 																		 bytePtrTy,
 																		 true));
+		}
+
+		llvm::GlobalVariable* createGlobalVar(const std::string &name, llvm::Constant *init) {
+			module->getOrInsertGlobal(name, init->getType());
+			auto variable = module->getNamedGlobal(name);
+			variable->setAlignment(llvm::MaybeAlign(4));
+			variable->setConstant(false);
+			variable->setInitializer(init);
+			return variable;
 		}
 
 	private:

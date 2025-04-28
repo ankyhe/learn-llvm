@@ -2,7 +2,8 @@
 
 int main(int argc, char* argv[]) {
 	std::string program = R"(
-    (print "Value: %d\n" 42)
+    // (print "VERSION: %d TRUE: %d FALSE: %d\n" VERSION TRUE FALSE)
+    (print "CONSTANT1: %s\n" (var CONSTANT1 "2024-04-28"))
   )";
 
 	EvaLLVM evaLLVM;
