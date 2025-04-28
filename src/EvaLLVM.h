@@ -2,6 +2,7 @@
 #define EVALLVM_H
 
 #include <iostream>
+#include <regex>
 #include <string>
 
 #include <llvm/IR/IRBuilder.h>
@@ -9,17 +10,22 @@
 #include <llvm/IR/LLVMContext.h>
 #include <llvm/IR/Verifier.h>
 
+#include "./parser/EvaParser.h"
+
+using syntax::EvaParser;
+
 class EvaLLVM {
 
 	public:
-		EvaLLVM() {
+		EvaLLVM(): parser(std::make_unique<EvaParser>()) {
 			initModule();
 
 			setupExternalFunctions();
 		}
 
 		void exec(const std::string& program) {
-			compile();
+			auto ast = parser->parse(program);
+			compile(ast);
 
 			module->print(llvm::outs(), nullptr);
 
@@ -29,21 +35,51 @@ class EvaLLVM {
 
 		}
 
-		void compile(/* ast */) {
+		void compile(const Exp &exp) {
 			fn = createFunction("main", llvm::FunctionType::get(builder->getInt32Ty(), false /* vararg */ ));
 
-			auto result = gen();
+			auto result = gen(exp);
 			
 			builder->CreateRet(builder->getInt32(0));
 		}
 
-		llvm::Value* gen() {
-			auto str = builder->CreateGlobalString("Hello World\n");
+		llvm::Value* gen(const Exp &exp) {
+			switch (exp.type) {
+				case NUMBER: return builder->getInt32(exp.number);
+				case STRING: {
+				  auto re = std::regex("\\\\n");
+					auto str = std::regex_replace(exp.string, re, "\n");
 
-			auto printfFn = module->getFunction("printf");
-			std::vector<llvm::Value *> args{str};
+				  return builder->CreateGlobalString(str);
+				}
 
-			return builder->CreateCall(printfFn, args);
+				case SYMBOL: throw std::runtime_error("Not Supported"); //TODO
+			  case LIST: {
+				  if(exp.list.empty()) {
+						return builder->getInt32(0);
+					}
+          
+				  auto tag = exp.list[0];
+					if (tag.type == SYMBOL) {
+						auto op = tag.string;
+						if (op == "printf" || op == "print") {
+							std::vector<llvm::Value *> args;
+							for (auto i = 1; i < exp.list.size(); ++i) {
+								args.push_back(gen(exp.list[i]));
+							}
+			        auto printfFn = module->getFunction("printf");
+			        return builder->CreateCall(printfFn, args);
+						}
+
+						// TODO
+				    throw std::runtime_error("Not Supported");
+					} else {
+						// TODO
+				    throw std::runtime_error("Not Supported");
+					}
+				}
+				default: throw std::runtime_error("IlleaglStatement: never reach here");
+			}
 		}
 
 		llvm::Function* createFunction(const std::string &fnName, llvm::FunctionType *fnType) {
@@ -103,6 +139,8 @@ class EvaLLVM {
 		std::unique_ptr<llvm::LLVMContext> ctx;
 		std::unique_ptr<llvm::Module> module;
 		std::unique_ptr<llvm::IRBuilder<>> builder;
+
+		std::unique_ptr<EvaParser> parser;
 };
 
 #endif //EVALLVM_H

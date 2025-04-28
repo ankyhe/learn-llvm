@@ -26,8 +26,12 @@
 *.a
 *.lib
 
+# for syntax-cli
+node_modules/*
+
 # Executables
 *.exe
 *.out
 *.app
 eva-llvm
+

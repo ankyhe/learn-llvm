@@ -2,9 +2,7 @@
 
 int main(int argc, char* argv[]) {
 	std::string program = R"(
-
-    42
-
+    (print "Value: %d\n" 42)
   )";
 
 	EvaLLVM evaLLVM;
