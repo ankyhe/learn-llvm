@@ -62,7 +62,14 @@ class EvaLLVM {
 					auto varName = exp.string;
 					auto value = env->lookup(varName);
 
-					if (auto globalVar = llvm::dyn_cast<llvm::GlobalVariable>(value)) {
+					if (auto localVar = llvm::dyn_cast<llvm::AllocaInst>(value)) {
+						return builder->CreateLoad(
+								localVar->getAllocatedType(),
+								localVar, 
+								varName.c_str());
+					}
+
+					else if (auto globalVar = llvm::dyn_cast<llvm::GlobalVariable>(value)) {
 						return builder->CreateLoad(globalVar->getInitializer()->getType(),
 								  globalVar,
 									varName.c_str());
@@ -87,13 +94,22 @@ class EvaLLVM {
 			        auto printfFn = module->getFunction("printf");
 			        return builder->CreateCall(printfFn, args);
 						} else if (op == "var") {
-							auto variableName = exp.list[1].string;
+							auto variableExp = exp.list[1];
+
+							auto variableName = extractVariableName(variableExp);
+							auto variableType = extractVariableType(variableExp);
 							auto init = gen(exp.list[2], env);
-							return createGlobalVar(variableName, ((llvm::Constant *)init))->getInitializer();
+
+							auto varBinding = allocateVariable(variableName, variableType, env);
+
+							return builder->CreateStore(init, varBinding);
 						} else if (op == "begin") {
+							std::map<std::string, llvm::Value *> records;
+							auto blockEnv = make_shared<Environment>(records, env);
 							llvm::Value *blockResources;
+
 							for (int i = 1; i < exp.list.size(); ++i) {
-								blockResources = gen(exp.list[i], env);
+								blockResources = gen(exp.list[i], blockEnv);
 							}
 							return blockResources;
 						}
@@ -173,6 +189,7 @@ class EvaLLVM {
 			ctx = std::make_unique<llvm::LLVMContext>();
 			module = std::make_unique<llvm::Module>("EvaLLVM", *ctx);
 			builder = std::make_unique<llvm::IRBuilder<>>(*ctx);
+			varsBuilder = std::make_unique<llvm::IRBuilder<>>(*ctx);
 		}
 
 		void setupGlobalEnvironment() {
@@ -190,11 +207,44 @@ class EvaLLVM {
 			globalEnv = std::make_shared<Environment>(globalRecords, nullptr);
 		}
 
+		std::string extractVariableName(const Exp &exp) {
+			return exp.type == LIST ? exp.list[0].string : exp.string;
+		}
+
+		llvm::Type* extractVariableType(const Exp &exp) {
+			if (exp.type == LIST) {
+				if (exp.list[1].type == SYMBOL) {
+					if (exp.list[1].string == "string") {
+						//! return builder->getInt8Ty()->getPointerTo();
+						return llvm::PointerType::get(builder->getInt8Ty(), 0);
+					} 
+				}
+			}
+			
+			return builder->getInt32Ty();
+		}
+
+		llvm::Value *allocateVariable(const std::string &varName, 
+				llvm::Type *varType,
+				Env env) {
+
+			varsBuilder->SetInsertPoint(&fn->getEntryBlock());
+
+			auto varAlloc = varsBuilder->CreateAlloca(varType, 0, varName.c_str());
+			env->define(varName, varAlloc);
+
+			return varAlloc;
+
+
+
+		}
+
 		llvm::Function *fn;
 
 		std::unique_ptr<llvm::LLVMContext> ctx;
 		std::unique_ptr<llvm::Module> module;
 		std::unique_ptr<llvm::IRBuilder<>> builder;
+		std::unique_ptr<llvm::IRBuilder<>> varsBuilder;
 
 		std::unique_ptr<EvaParser> parser;
 		std::shared_ptr<Environment> globalEnv;

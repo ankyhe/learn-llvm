@@ -6,8 +6,8 @@ int main(int argc, char* argv[]) {
     (var VERSION 42)
 
     (begin
-       (var VERSION 100)
-       (print "VERSION: %d\n" VERSION)
+       (var (VERSION string) "2025-04-29")
+       (print "VERSION: %s\n" VERSION)
     )
    
     (print "VERSION: %d\n" VERSION)
